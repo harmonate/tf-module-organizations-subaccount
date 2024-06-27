@@ -40,7 +40,7 @@ resource "aws_s3_bucket_versioning" "config_bucket_versioning" {
 }
 
 resource "aws_s3_bucket_lifecycle_configuration" "config_bucket_lifecycle" {
-
+  depends_on = [ aws_s3_bucket_policy.config_bucket_policy ]
   provider = aws.subaccount
   bucket   = aws_s3_bucket.config_bucket.id
 
@@ -128,6 +128,7 @@ resource "aws_s3_bucket_versioning" "cloudtrail_bucket_versioning" {
 }
 
 resource "aws_s3_bucket_lifecycle_configuration" "cloudtrail_bucket_lifecycle" {
+  depends_on = [ aws_s3_bucket_policy.cloudtrail_bucket_policy ]
   provider = aws.subaccount
   bucket   = aws_s3_bucket.cloudtrail_bucket.id
 
@@ -208,6 +209,23 @@ data "aws_iam_policy_document" "s3_permissions" {
   }
 }
 
+resource "aws_iam_role" "s3_assume_role" {
+  name = "S3AssumeRole"
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17",
+    Statement = [
+      {
+        Effect = "Allow",
+        Principal = {
+          Service = "s3.amazonaws.com"
+        },
+        Action = "sts:AssumeRole"
+      }
+    ]
+  })
+}
+
+
 resource "aws_iam_policy" "s3_permissions_policy" {
   name        = "S3PermissionsPolicy"
   description = "Policy for S3 bucket lifecycle configuration"
@@ -215,10 +233,7 @@ resource "aws_iam_policy" "s3_permissions_policy" {
 }
 
 resource "aws_iam_role_policy_attachment" "attach_s3_permissions" {
-  role       = aws_iam_role.config_role.name
+  role       = aws_iam_role.s3_assume_role.name
   policy_arn = aws_iam_policy.s3_permissions_policy.arn
-  depends_on = [
-    aws_iam_role.config_role
-  ]
 }
 
