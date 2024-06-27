@@ -37,25 +37,25 @@ resource "aws_s3_bucket_versioning" "config_bucket_versioning" {
   }
 }
 
-resource "aws_s3_bucket_lifecycle_configuration" "config_bucket_lifecycle" {
-  depends_on = [aws_s3_bucket_policy.config_bucket_policy]
-  provider   = aws.subaccount
-  bucket     = aws_s3_bucket.config_bucket.id
-  rule {
-    id     = "config-lifecycle-rule"
-    status = "Enabled"
-    transition {
-      days          = 30
-      storage_class = "STANDARD_IA"
-    }
-    expiration {
-      days = 365
-    }
-    noncurrent_version_expiration {
-      noncurrent_days = 90
-    }
-  }
-}
+# resource "aws_s3_bucket_lifecycle_configuration" "config_bucket_lifecycle" {
+#   depends_on = [aws_s3_bucket_policy.config_bucket_policy]
+#   provider   = aws.subaccount
+#   bucket     = aws_s3_bucket.config_bucket.id
+#   rule {
+#     id     = "config-lifecycle-rule"
+#     status = "Enabled"
+#     transition {
+#       days          = 30
+#       storage_class = "STANDARD_IA"
+#     }
+#     expiration {
+#       days = 365
+#     }
+#     noncurrent_version_expiration {
+#       noncurrent_days = 90
+#     }
+#   }
+# }
 
 resource "aws_s3_bucket_policy" "config_bucket_policy" {
   depends_on = [aws_s3_bucket.config_bucket, aws_iam_role_policy_attachment.s3_full_access]
@@ -116,25 +116,25 @@ resource "aws_s3_bucket_versioning" "cloudtrail_bucket_versioning" {
   }
 }
 
-resource "aws_s3_bucket_lifecycle_configuration" "cloudtrail_bucket_lifecycle" {
-  depends_on = [aws_s3_bucket.cloudtrail_bucket, aws_iam_role_policy_attachment.s3_full_access]
-  provider   = aws.subaccount
-  bucket     = aws_s3_bucket.cloudtrail_bucket.id
-  rule {
-    id     = "cloudtrail-lifecycle-rule"
-    status = "Enabled"
-    transition {
-      days          = 30
-      storage_class = "STANDARD_IA"
-    }
-    expiration {
-      days = 365
-    }
-    noncurrent_version_expiration {
-      noncurrent_days = 90
-    }
-  }
-}
+# resource "aws_s3_bucket_lifecycle_configuration" "cloudtrail_bucket_lifecycle" {
+#   depends_on = [aws_s3_bucket.cloudtrail_bucket, aws_iam_role_policy_attachment.s3_full_access]
+#   provider   = aws.subaccount
+#   bucket     = aws_s3_bucket.cloudtrail_bucket.id
+#   rule {
+#     id     = "cloudtrail-lifecycle-rule"
+#     status = "Enabled"
+#     transition {
+#       days          = 30
+#       storage_class = "STANDARD_IA"
+#     }
+#     expiration {
+#       days = 365
+#     }
+#     noncurrent_version_expiration {
+#       noncurrent_days = 90
+#     }
+#   }
+# }
 
 resource "aws_s3_bucket_policy" "cloudtrail_bucket_policy" {
   bucket = aws_s3_bucket.cloudtrail_bucket.id
