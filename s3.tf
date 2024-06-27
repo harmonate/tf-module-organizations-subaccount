@@ -25,8 +25,8 @@ resource "aws_s3_bucket_ownership_controls" "config_bucket_ownership" {
 
 resource "aws_s3_bucket_acl" "config_bucket_acl" {
   depends_on = [aws_s3_bucket_ownership_controls.config_bucket_ownership]
-  bucket = aws_s3_bucket.config_bucket.id
-  acl    = "private"
+  bucket     = aws_s3_bucket.config_bucket.id
+  acl        = "private"
 }
 
 resource "aws_s3_bucket_versioning" "config_bucket_versioning" {
@@ -62,22 +62,22 @@ resource "aws_s3_bucket_policy" "config_bucket_policy" {
     Version = "2012-10-17",
     Statement = [
       {
-        Sid       = "AWSConfigAclCheck20150319",
-        Effect    = "Allow",
+        Sid    = "AWSConfigAclCheck20150319",
+        Effect = "Allow",
         Principal = {
           Service = "config.amazonaws.com"
         },
-        Action    = "s3:GetBucketAcl",
-        Resource  = "${aws_s3_bucket.config_bucket.arn}"
+        Action   = "s3:GetBucketAcl",
+        Resource = "${aws_s3_bucket.config_bucket.arn}"
       },
       {
-        Sid       = "AWSConfigWrite20150319",
-        Effect    = "Allow",
+        Sid    = "AWSConfigWrite20150319",
+        Effect = "Allow",
         Principal = {
           Service = "config.amazonaws.com"
         },
-        Action    = "s3:PutObject",
-        Resource  = "${aws_s3_bucket.config_bucket.arn}/*",
+        Action   = "s3:PutObject",
+        Resource = "${aws_s3_bucket.config_bucket.arn}/*",
         Condition = {
           StringEquals = {
             "s3:x-amz-acl" = "bucket-owner-full-control"
@@ -102,8 +102,8 @@ resource "aws_s3_bucket_ownership_controls" "cloudtrail_bucket_ownership" {
 
 resource "aws_s3_bucket_acl" "cloudtrail_bucket_acl" {
   depends_on = [aws_s3_bucket_ownership_controls.cloudtrail_bucket_ownership]
-  bucket = aws_s3_bucket.cloudtrail_bucket.id
-  acl    = "private"
+  bucket     = aws_s3_bucket.cloudtrail_bucket.id
+  acl        = "private"
 }
 
 resource "aws_s3_bucket_versioning" "cloudtrail_bucket_versioning" {
@@ -139,22 +139,22 @@ resource "aws_s3_bucket_policy" "cloudtrail_bucket_policy" {
     Version = "2012-10-17",
     Statement = [
       {
-        Sid       = "AWSCloudTrailAclCheck20150319",
-        Effect    = "Allow",
+        Sid    = "AWSCloudTrailAclCheck20150319",
+        Effect = "Allow",
         Principal = {
           Service = "cloudtrail.amazonaws.com"
         },
-        Action    = "s3:GetBucketAcl",
-        Resource  = "${aws_s3_bucket.cloudtrail_bucket.arn}"
+        Action   = "s3:GetBucketAcl",
+        Resource = "${aws_s3_bucket.cloudtrail_bucket.arn}"
       },
       {
-        Sid       = "AWSCloudTrailWrite20150319",
-        Effect    = "Allow",
+        Sid    = "AWSCloudTrailWrite20150319",
+        Effect = "Allow",
         Principal = {
           Service = "cloudtrail.amazonaws.com"
         },
-        Action    = "s3:PutObject",
-        Resource  = "${aws_s3_bucket.cloudtrail_bucket.arn}/*",
+        Action   = "s3:PutObject",
+        Resource = "${aws_s3_bucket.cloudtrail_bucket.arn}/*",
         Condition = {
           StringEquals = {
             "s3:x-amz-acl" = "bucket-owner-full-control"
@@ -171,7 +171,16 @@ data "aws_iam_policy_document" "s3_lifecycle_policy_document" {
     actions = [
       "s3:PutBucketLifecycleConfiguration",
       "s3:GetBucketLifecycleConfiguration",
-      "s3:DeleteBucketLifecycle"
+      "s3:DeleteBucketLifecycle",
+      "s3:PutBucketPolicy",
+      "s3:GetBucketPolicy",
+      "s3:DeleteBucketPolicy",
+      "s3:ListBucket",
+      "s3:CreateBucket",
+      "s3:DeleteBucket",
+      "s3:PutObject",
+      "s3:GetObject",
+      "s3:DeleteObject"
     ]
     resources = [
       "arn:aws:s3:::${aws_s3_bucket.config_bucket.bucket}",
@@ -182,6 +191,23 @@ data "aws_iam_policy_document" "s3_lifecycle_policy_document" {
   }
 }
 
+resource "aws_iam_role" "s3_management_role" {
+  provider = aws.subaccount
+  name     = "S3ManagementRole"
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17",
+    Statement = [
+      {
+        Effect = "Allow",
+        Principal = {
+          Service = "s3.amazonaws.com"
+        },
+        Action = "sts:AssumeRole"
+      }
+    ]
+  })
+}
+
 resource "aws_iam_policy" "s3_lifecycle_policy" {
   provider    = aws.subaccount
   name        = "S3LifecyclePolicy"
@@ -190,7 +216,7 @@ resource "aws_iam_policy" "s3_lifecycle_policy" {
 }
 
 resource "aws_iam_role_policy_attachment" "attach_s3_lifecycle_policy" {
-  provider  = aws.subaccount
-  role      = aws_iam_role.config_role.name
+  provider   = aws.subaccount
+  role       = aws_iam_role.s3_management_role.name
   policy_arn = aws_iam_policy.s3_lifecycle_policy.arn
 }
