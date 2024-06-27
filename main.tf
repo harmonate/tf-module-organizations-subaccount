@@ -176,7 +176,7 @@ resource "aws_iam_role" "config_role" {
 resource "aws_iam_role_policy_attachment" "config_role_policy" {
   provider   = aws.subaccount
   role       = aws_iam_role.config_role.name
-  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSConfigRole"
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSConfigRoleForOrganizations"
 }
 
 resource "aws_config_configuration_recorder" "all" {
@@ -193,8 +193,12 @@ resource "aws_config_configuration_recorder_status" "all" {
 }
 
 resource "aws_config_delivery_channel" "all" {
-  depends_on     = [aws_s3_bucket.config_bucket]
   provider       = aws.subaccount
   name           = "all"
   s3_bucket_name = local.config_bucket_name
+  depends_on = [
+    aws_config_configuration_recorder.all,
+    aws_config_configuration_recorder_status.all,
+    aws_s3_bucket.config_bucket
+  ]
 }

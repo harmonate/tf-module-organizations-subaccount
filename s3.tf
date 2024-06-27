@@ -115,3 +115,73 @@ resource "aws_s3_bucket_lifecycle_configuration" "cloudtrail_bucket_lifecycle" {
     }
   }
 }
+
+resource "aws_s3_bucket_policy" "cloudtrail_bucket_policy" {
+  bucket = aws_s3_bucket.cloudtrail_bucket.id
+
+  policy = jsonencode({
+    Version = "2012-10-17",
+    Statement = [
+      {
+        Sid       = "AWSCloudTrailAclCheck20150319",
+        Effect    = "Allow",
+        Principal = {
+          Service = "cloudtrail.amazonaws.com"
+        },
+        Action    = "s3:GetBucketAcl",
+        Resource  = "${aws_s3_bucket.cloudtrail_bucket.arn}"
+      },
+      {
+        Sid       = "AWSCloudTrailWrite20150319",
+        Effect    = "Allow",
+        Principal = {
+          Service = "cloudtrail.amazonaws.com"
+        },
+        Action    = "s3:PutObject",
+        Resource  = "${aws_s3_bucket.cloudtrail_bucket.arn}/*",
+        Condition = {
+          StringEquals = {
+            "s3:x-amz-acl" = "bucket-owner-full-control"
+          }
+        }
+      }
+    ]
+  })
+}
+
+data "aws_iam_policy_document" "s3_permissions" {
+  statement {
+    actions = [
+      "s3:PutBucketLifecycleConfiguration",
+      "s3:GetBucketLifecycleConfiguration",
+      "s3:DeleteBucketLifecycle",
+      "s3:PutBucketPolicy",
+      "s3:GetBucketPolicy",
+      "s3:DeleteBucketPolicy",
+      "s3:ListBucket",
+      "s3:CreateBucket",
+      "s3:DeleteBucket",
+      "s3:PutObject",
+      "s3:GetObject",
+      "s3:DeleteObject"
+    ]
+    resources = [
+      "arn:aws:s3:::${aws_s3_bucket.config_bucket.bucket}",
+      "arn:aws:s3:::${aws_s3_bucket.config_bucket.bucket}/*",
+      "arn:aws:s3:::${aws_s3_bucket.cloudtrail_bucket.bucket}",
+      "arn:aws:s3:::${aws_s3_bucket.cloudtrail_bucket.bucket}/*"
+    ]
+  }
+}
+
+resource "aws_iam_policy" "s3_permissions_policy" {
+  name        = "S3PermissionsPolicy"
+  description = "Policy for S3 bucket lifecycle configuration"
+  policy      = data.aws_iam_policy_document.s3_permissions.json
+}
+
+resource "aws_iam_role_policy_attachment" "attach_s3_permissions" {
+  role       = aws_iam_role.config_role.name
+  policy_arn = aws_iam_policy.s3_permissions_policy.arn
+}
+
