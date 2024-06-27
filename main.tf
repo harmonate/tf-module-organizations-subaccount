@@ -180,16 +180,24 @@ resource "aws_iam_role_policy_attachment" "config_role_policy" {
 }
 
 resource "aws_config_configuration_recorder" "all" {
-  depends_on = [aws_iam_role_policy_attachment.config_role_policy]
-  provider   = aws.subaccount
-  name       = "all"
-  role_arn   = aws_iam_role.config_role.arn
+  provider = aws.subaccount
+  name     = "all"
+  role_arn = aws_iam_role.config_role.arn
+
+  depends_on = [
+    aws_iam_role_policy_attachment.config_role_policy,
+    aws_config_delivery_channel.all
+  ]
 }
 
 resource "aws_config_configuration_recorder_status" "all" {
   provider   = aws.subaccount
   name       = aws_config_configuration_recorder.all.name
   is_enabled = true
+
+  depends_on = [
+    aws_config_configuration_recorder.all
+  ]
 }
 
 resource "aws_config_delivery_channel" "all" {
@@ -197,8 +205,7 @@ resource "aws_config_delivery_channel" "all" {
   name           = "all"
   s3_bucket_name = local.config_bucket_name
   depends_on = [
-    aws_config_configuration_recorder.all,
-    aws_config_configuration_recorder_status.all,
-    aws_s3_bucket.config_bucket
+    aws_s3_bucket.config_bucket,
+    aws_s3_bucket_policy.config_bucket_policy
   ]
 }
