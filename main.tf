@@ -155,15 +155,33 @@ resource "aws_cloudtrail" "subaccount_trail" {
   is_multi_region_trail         = true
 }
 
-data "aws_iam_role" "config_role" {
+resource "aws_iam_role" "config_role" {
   provider = aws.subaccount
-  name      = "aws-service-role/config.amazonaws.com/AWSServiceRoleForConfig"
+  name     = "AWSServiceRoleForConfig"
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17",
+    Statement = [
+      {
+        Effect = "Allow",
+        Principal = {
+          Service = "config.amazonaws.com"
+        },
+        Action = "sts:AssumeRole"
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "config_role_policy" {
+  provider   = aws.subaccount
+  role       = aws_iam_role.config_role.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSConfigRole"
 }
 
 resource "aws_config_configuration_recorder" "all" {
   provider = aws.subaccount
   name     = "all"
-  role_arn = data.aws_iam_role.config_role.arn
+  role_arn = aws_iam_role.config_role.arn
 }
 
 resource "aws_config_configuration_recorder_status" "all" {
