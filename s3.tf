@@ -14,6 +14,7 @@ locals {
 resource "aws_s3_bucket" "config_bucket" {
   bucket        = local.config_bucket_name
   force_destroy = true
+  depends_on    = [aws_iam_role_policy_attachment.s3_full_access]
 }
 
 resource "aws_s3_bucket_ownership_controls" "config_bucket_ownership" {
@@ -57,6 +58,7 @@ resource "aws_s3_bucket_lifecycle_configuration" "config_bucket_lifecycle" {
 }
 
 resource "aws_s3_bucket_policy" "config_bucket_policy" {
+  depends_on = [aws_s3_bucket.config_bucket, aws_iam_role_policy_attachment.s3_full_access]
   bucket = aws_s3_bucket.config_bucket.id
   policy = jsonencode({
     Version = "2012-10-17",
@@ -91,6 +93,7 @@ resource "aws_s3_bucket_policy" "config_bucket_policy" {
 resource "aws_s3_bucket" "cloudtrail_bucket" {
   bucket        = local.cloudtrail_bucket_name
   force_destroy = true
+  depends_on    = [aws_iam_role_policy_attachment.s3_full_access]
 }
 
 resource "aws_s3_bucket_ownership_controls" "cloudtrail_bucket_ownership" {
@@ -114,7 +117,7 @@ resource "aws_s3_bucket_versioning" "cloudtrail_bucket_versioning" {
 }
 
 resource "aws_s3_bucket_lifecycle_configuration" "cloudtrail_bucket_lifecycle" {
-  depends_on = [aws_s3_bucket_policy.cloudtrail_bucket_policy]
+  depends_on = [aws_s3_bucket.cloudtrail_bucket, aws_iam_role_policy_attachment.s3_full_access]
   provider   = aws.subaccount
   bucket     = aws_s3_bucket.cloudtrail_bucket.id
   rule {
@@ -165,32 +168,6 @@ resource "aws_s3_bucket_policy" "cloudtrail_bucket_policy" {
   })
 }
 
-data "aws_iam_policy_document" "s3_lifecycle_policy_document" {
-  statement {
-    effect = "Allow"
-    actions = [
-      "s3:PutBucketLifecycleConfiguration",
-      "s3:GetBucketLifecycleConfiguration",
-      "s3:DeleteBucketLifecycle",
-      "s3:PutBucketPolicy",
-      "s3:GetBucketPolicy",
-      "s3:DeleteBucketPolicy",
-      "s3:ListBucket",
-      "s3:CreateBucket",
-      "s3:DeleteBucket",
-      "s3:PutObject",
-      "s3:GetObject",
-      "s3:DeleteObject"
-    ]
-    resources = [
-      "arn:aws:s3:::${aws_s3_bucket.config_bucket.bucket}",
-      "arn:aws:s3:::${aws_s3_bucket.config_bucket.bucket}/*",
-      "arn:aws:s3:::${aws_s3_bucket.cloudtrail_bucket.bucket}",
-      "arn:aws:s3:::${aws_s3_bucket.cloudtrail_bucket.bucket}/*"
-    ]
-  }
-}
-
 resource "aws_iam_role" "s3_management_role" {
   provider = aws.subaccount
   name     = "S3ManagementRole"
@@ -201,6 +178,7 @@ resource "aws_iam_role" "s3_management_role" {
         Effect = "Allow",
         Principal = {
           Service = "s3.amazonaws.com"
+          AWS     = "arn:aws:iam::${aws_organizations_account.subaccount.id}:root"
         },
         Action = "sts:AssumeRole"
       }
@@ -208,15 +186,8 @@ resource "aws_iam_role" "s3_management_role" {
   })
 }
 
-resource "aws_iam_policy" "s3_lifecycle_policy" {
-  provider    = aws.subaccount
-  name        = "S3LifecyclePolicy"
-  description = "Policy for managing S3 bucket lifecycle configurations"
-  policy      = data.aws_iam_policy_document.s3_lifecycle_policy_document.json
-}
-
-resource "aws_iam_role_policy_attachment" "attach_s3_lifecycle_policy" {
+resource "aws_iam_role_policy_attachment" "s3_full_access" {
   provider   = aws.subaccount
   role       = aws_iam_role.s3_management_role.name
-  policy_arn = aws_iam_policy.s3_lifecycle_policy.arn
+  policy_arn = "arn:aws:iam::aws:policy/AmazonS3FullAccess"
 }
