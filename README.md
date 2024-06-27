@@ -51,7 +51,7 @@ module "subaccount" {
     {
       name  = "jane_doe"
       email = "jane_doe@example.com"
-      role  = "Administrator"
+      role  = "Administrator"   ##at least one user created must be Administrator
     }
   ]
   password_length = 16
@@ -60,5 +60,7 @@ module "subaccount" {
     "arn:aws:iam::aws:policy/PowerUserAccess"
   ]
   region = "us-east-1"
+  cloudtrail_bucket_name     = "my-cloudtrail-bucket"
+  config_bucket_name         = "my-config-bucket"
 }
 ```

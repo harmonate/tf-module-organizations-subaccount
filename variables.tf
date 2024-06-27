@@ -58,6 +58,23 @@ variable "users" {
     email = string
     role  = string
   }))
+
+  validation {
+    condition = can(
+      length([for user in values(var.users) : user if user.role == "Administrator"]) > 0
+    )
+    error_message = "At least one user must have the role 'Administrator'."
+  }
+}
+
+variable "cloudtrail_bucket_name_prefix" {
+  description = "The name of the S3 bucket for CloudTrail logs"
+  type        = string
+}
+
+variable "config_bucket_name_prefix" {
+  description = "The name of the S3 bucket for AWS Config"
+  type        = string
 }
 
 variable "password_length" {

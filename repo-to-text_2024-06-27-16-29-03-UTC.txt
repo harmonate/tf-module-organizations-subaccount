@@ -1,0 +1,480 @@
+Directory: organizations-subaccount
+
+Directory Structure:
+```
+.
+├── .gitignore
+├── main.tf
+├── outputs.tf
+├── provider.tf
+├── s3.tf
+└── variables.tf
+```
+
+Contents of outputs.tf:
+```
+output "new_account_id" {
+  value = aws_organizations_account.subaccount.id
+}
+
+output "iam_user_console_login" {
+  value = "https://${aws_organizations_account.subaccount.id}.signin.aws.amazon.com/console"
+}
+
+output "user_login_profiles" {
+  value = {
+    for user in aws_iam_user_login_profile.users : user.user => user.password
+  }
+}
+
+```
+
+Contents of main.tf:
+```
+resource "aws_organizations_account" "subaccount" {
+  name      = var.account_name
+  email     = var.account_email
+  role_name = var.role_name
+  parent_id = var.organization_root_id
+  tags      = var.tags
+}
+
+resource "aws_iam_account_password_policy" "password_policy" {
+  provider                       = aws.subaccount
+  minimum_password_length        = var.password_policy.minimum_password_length
+  require_uppercase_characters   = var.password_policy.require_uppercase_characters
+  require_lowercase_characters   = var.password_policy.require_lowercase_characters
+  require_numbers                = var.password_policy.require_numbers
+  require_symbols                = var.password_policy.require_symbols
+  allow_users_to_change_password = var.password_policy.allow_users_to_change_password
+  max_password_age               = var.password_policy.max_password_age
+}
+
+data "aws_iam_policy_document" "power_user" {
+  statement {
+    effect    = "Allow"
+    actions   = var.power_user_actions
+    resources = ["*"]
+  }
+}
+
+resource "aws_iam_policy" "power_user_policy" {
+  provider = aws.subaccount
+  name     = "PowerUserAccess"
+  policy   = data.aws_iam_policy_document.power_user.json
+}
+
+resource "aws_iam_policy" "custom_policy" {
+  provider    = aws.subaccount
+  name        = var.custom_policy.name
+  description = var.custom_policy.description
+  policy      = var.custom_policy.policy
+}
+
+resource "aws_iam_user" "users" {
+  for_each = var.users
+  provider = aws.subaccount
+  name     = each.value.name
+  tags = {
+    Email = each.value.email
+    Role  = each.value.role
+  }
+}
+
+resource "aws_iam_user_login_profile" "users" {
+  for_each                = aws_iam_user.users
+  provider                = aws.subaccount
+  user                    = each.value.name
+  password_length         = var.password_length
+  password_reset_required = true
+}
+
+resource "aws_iam_group" "admin" {
+  provider = aws.subaccount
+  name     = "admin"
+}
+
+resource "aws_iam_group_policy_attachment" "admin_policy_attachment" {
+  provider   = aws.subaccount
+  group      = aws_iam_group.admin.name
+  policy_arn = "arn:aws:iam::aws:policy/AdministratorAccess"
+}
+
+resource "aws_iam_group_membership" "admin_membership" {
+  provider = aws.subaccount
+  name     = "admin_membership"
+  users    = [for user, details in var.users : user if details.role == "Administrator"]
+  group    = aws_iam_group.admin.name
+}
+
+resource "aws_iam_group" "group" {
+  provider = aws.subaccount
+  name     = var.group_name
+}
+
+resource "aws_iam_group_policy_attachment" "policies" {
+  for_each   = toset(var.group_policy_arns)
+  provider   = aws.subaccount
+  group      = aws_iam_group.group.name
+  policy_arn = each.value
+}
+
+resource "aws_iam_group_membership" "group_membership" {
+  provider = aws.subaccount
+  name     = "${var.group_name}_membership"
+  users    = [for user in aws_iam_user.users : user.name]
+  group    = aws_iam_group.group.name
+}
+
+resource "aws_iam_group_policy_attachment" "self_management_policy_attachment" {
+  for_each   = toset([aws_iam_group.admin.name, var.group_name])
+  provider   = aws.subaccount
+  group      = each.value
+  policy_arn = aws_iam_policy.self_management_policy.arn
+}
+
+data "aws_iam_policy_document" "self_management_policy" {
+  statement {
+    actions = [
+      "iam:ChangePassword",
+      "iam:CreateVirtualMFADevice",
+      "iam:DeleteVirtualMFADevice",
+      "iam:EnableMFADevice",
+      "iam:ResyncMFADevice",
+      "iam:DeactivateMFADevice",
+      "iam:ListMFADevices",
+      "iam:ListVirtualMFADevices",
+      "iam:ListAccountAliases",
+      "iam:ListUsers"
+    ]
+    effect = "Allow"
+    resources = [
+      "arn:aws:iam::*:user/$${aws:username}",
+      "arn:aws:iam::*:mfa/$${aws:username}"
+    ]
+  }
+}
+
+resource "aws_iam_policy" "self_management_policy" {
+  provider = aws.subaccount
+  name     = "SelfManagementPolicy"
+  policy   = data.aws_iam_policy_document.self_management_policy.json
+}
+
+data "aws_iam_policy_document" "mfa_enforce_policy" {
+  statement {
+    effect    = "Deny"
+    actions   = ["*"]
+    resources = ["*"]
+    condition {
+      test     = "Bool"
+      variable = "aws:MultiFactorAuthPresent"
+      values   = ["false"]
+    }
+  }
+}
+
+resource "aws_iam_policy" "mfa_enforce_policy" {
+  provider = aws.subaccount
+  name     = "MFAEnforcePolicy"
+  policy   = data.aws_iam_policy_document.mfa_enforce_policy.json
+}
+
+resource "aws_cloudtrail" "subaccount_trail" {
+  provider                      = aws.subaccount
+  name                          = "${var.account_name}-trail"
+  s3_bucket_name                = local.cloudtrail_bucket_name
+  include_global_service_events = true
+  is_multi_region_trail         = true
+}
+
+data "aws_iam_role" "config_role" {
+  provider = aws.subaccount
+  name      = "aws-service-role/config.amazonaws.com/AWSServiceRoleForConfig"
+}
+
+resource "aws_config_configuration_recorder" "all" {
+  provider = aws.subaccount
+  name     = "all"
+  role_arn = data.aws_iam_role.config_role.arn
+}
+
+resource "aws_config_configuration_recorder_status" "all" {
+  provider   = aws.subaccount
+  name       = aws_config_configuration_recorder.all.name
+  is_enabled = true
+}
+
+resource "aws_config_delivery_channel" "all" {
+  provider       = aws.subaccount
+  name           = "all"
+  s3_bucket_name = local.config_bucket_name
+}
+
+```
+
+Contents of s3.tf:
+```
+resource "random_string" "suffix" {
+  length  = 5
+  special = false
+  upper   = false
+  numeric = true
+  lower   = true
+}
+
+
+locals {
+  config_bucket_name     = "${var.config_bucket_name_prefix}-${random_string.suffix.result}"
+  cloudtrail_bucket_name = "${var.cloudtrail_bucket_name_prefix}-${random_string.suffix.result}"
+}
+
+# Conditional data source for existing config bucket
+data "aws_s3_bucket" "existing_config_bucket" {
+  bucket = local.config_bucket_name
+}
+
+# Conditional data source for existing cloudtrail bucket
+data "aws_s3_bucket" "existing_cloudtrail_bucket" {
+  bucket = local.cloudtrail_bucket_name
+}
+
+resource "aws_s3_bucket" "config_bucket" {
+  count         = length([for k, v in data.aws_s3_bucket.existing_config_bucket : k]) == 0 ? 1 : 0
+  bucket        = local.config_bucket_name
+  force_destroy = true
+}
+
+resource "aws_s3_bucket_ownership_controls" "config_bucket_ownership" {
+  count  = length(aws_s3_bucket.config_bucket)
+  bucket = aws_s3_bucket.config_bucket[count.index].id
+  rule {
+    object_ownership = "BucketOwnerPreferred"
+  }
+}
+
+resource "aws_s3_bucket_acl" "config_bucket_acl" {
+  count      = length(aws_s3_bucket.config_bucket)
+  depends_on = [aws_s3_bucket_ownership_controls.config_bucket_ownership]
+
+  bucket = aws_s3_bucket.config_bucket[count.index].id
+  acl    = "private"
+}
+
+resource "aws_s3_bucket_versioning" "config_bucket_versioning" {
+  count  = length(aws_s3_bucket.config_bucket)
+  bucket = aws_s3_bucket.config_bucket[count.index].id
+  versioning_configuration {
+    status = "Disabled"
+  }
+  mfa = "Disabled"
+}
+
+resource "aws_s3_bucket_lifecycle_configuration" "config_bucket_lifecycle" {
+
+  provider = aws.subaccount
+  count    = length(aws_s3_bucket.config_bucket)
+  bucket   = aws_s3_bucket.config_bucket[count.index].id
+
+  rule {
+    id     = "config-lifecycle-rule"
+    status = "Enabled"
+
+    transition {
+      days          = 30
+      storage_class = "STANDARD_IA"
+    }
+
+    expiration {
+      days = 365
+    }
+
+    noncurrent_version_expiration {
+      noncurrent_days = 90
+    }
+  }
+}
+
+resource "aws_s3_bucket" "cloudtrail_bucket" {
+  count         = length([for k, v in data.aws_s3_bucket.existing_cloudtrail_bucket : k]) == 0 ? 1 : 0
+  bucket        = local.cloudtrail_bucket_name
+  force_destroy = true
+}
+
+resource "aws_s3_bucket_ownership_controls" "cloudtrail_bucket_ownership" {
+  count  = length(aws_s3_bucket.cloudtrail_bucket)
+  bucket = aws_s3_bucket.cloudtrail_bucket[count.index].id
+  rule {
+    object_ownership = "BucketOwnerPreferred"
+  }
+}
+
+resource "aws_s3_bucket_acl" "cloudtrail_bucket_acl" {
+  depends_on = [aws_s3_bucket_ownership_controls.cloudtrail_bucket_ownership]
+
+  count  = length(aws_s3_bucket.cloudtrail_bucket)
+  bucket = aws_s3_bucket.cloudtrail_bucket[count.index].id
+  acl    = "private"
+}
+
+resource "aws_s3_bucket_versioning" "cloudtrail_bucket_versioning" {
+  count  = length(aws_s3_bucket.cloudtrail_bucket)
+  bucket = aws_s3_bucket.cloudtrail_bucket[count.index].id
+  versioning_configuration {
+    status = "Disabled"
+  }
+  mfa = "Disabled"
+}
+
+resource "aws_s3_bucket_lifecycle_configuration" "cloudtrail_bucket_lifecycle" {
+  provider = aws.subaccount
+  count    = length(aws_s3_bucket.cloudtrail_bucket)
+  bucket   = aws_s3_bucket.cloudtrail_bucket[count.index].id
+
+  rule {
+    id     = "cloudtrail-lifecycle-rule"
+    status = "Enabled"
+
+    transition {
+      days          = 30
+      storage_class = "STANDARD_IA"
+    }
+
+    expiration {
+      days = 365
+    }
+
+    noncurrent_version_expiration {
+      noncurrent_days = 90
+    }
+  }
+}
+
+```
+
+Contents of variables.tf:
+```
+variable "account_name" {
+  description = "The name of the AWS account to be created"
+  type        = string
+}
+
+variable "account_email" {
+  description = "The email for the AWS account"
+  type        = string
+}
+
+variable "role_name" {
+  description = "The role name for the new account"
+  type        = string
+  default     = "OrganizationAccountAccessRole"
+}
+
+variable "organization_root_id" {
+  description = "The organization root ID"
+  type        = string
+}
+
+variable "tags" {
+  description = "Tags to apply to the new account"
+  type        = map(string)
+}
+
+variable "password_policy" {
+  description = "Password policy settings"
+  type = object({
+    minimum_password_length        = number
+    require_uppercase_characters   = bool
+    require_lowercase_characters   = bool
+    require_numbers                = bool
+    require_symbols                = bool
+    allow_users_to_change_password = bool
+    max_password_age               = number
+  })
+}
+
+variable "power_user_actions" {
+  description = "Actions allowed for the Power User policy"
+  type        = list(string)
+}
+
+variable "custom_policy" {
+  description = "Custom IAM policy settings"
+  type = object({
+    name        = string
+    description = string
+    policy      = string
+  })
+}
+
+variable "users" {
+  description = "List of users to create"
+  type = map(object({
+    name  = string
+    email = string
+    role  = string
+  }))
+
+  validation {
+    condition = can(
+      length([for user in values(var.users) : user if user.role == "Administrator"]) > 0
+    )
+    error_message = "At least one user must have the role 'Administrator'."
+  }
+}
+
+variable "cloudtrail_bucket_name_prefix" {
+  description = "The name of the S3 bucket for CloudTrail logs"
+  type        = string
+}
+
+variable "config_bucket_name_prefix" {
+  description = "The name of the S3 bucket for AWS Config"
+  type        = string
+}
+
+variable "password_length" {
+  description = "Length of the user passwords"
+  type        = number
+  default     = 16
+}
+
+variable "group_name" {
+  description = "Name of the IAM group"
+  type        = string
+}
+
+variable "group_policy_arns" {
+  description = "List of policy ARNs to attach to the group"
+  type        = list(string)
+}
+
+variable "region" {
+  description = "The AWS region to deploy resources"
+  type        = string
+  default     = "us-east-1"
+}
+
+variable "provider_alias" {
+  description = "Alias for the subaccount provider"
+  type        = string
+  default     = "subaccount"
+}
+```
+
+Contents of provider.tf:
+```
+provider "aws" {
+  region = var.region
+}
+
+provider "aws" {
+  alias  = "subaccount"
+  region = var.region
+  assume_role {
+    role_arn = "arn:aws:iam::${aws_organizations_account.subaccount.id}:role/OrganizationAccountAccessRole"
+  }
+}
+
+```
+
