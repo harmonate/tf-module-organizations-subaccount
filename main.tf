@@ -148,6 +148,7 @@ resource "aws_iam_policy" "mfa_enforce_policy" {
 }
 
 resource "aws_cloudtrail" "subaccount_trail" {
+  depends_on                    = [aws_s3_bucket.cloudtrail_bucket]
   provider                      = aws.subaccount
   name                          = "${var.account_name}-trail"
   s3_bucket_name                = local.cloudtrail_bucket_name
@@ -179,9 +180,10 @@ resource "aws_iam_role_policy_attachment" "config_role_policy" {
 }
 
 resource "aws_config_configuration_recorder" "all" {
-  provider = aws.subaccount
-  name     = "all"
-  role_arn = aws_iam_role.config_role.arn
+  depends_on = [aws_iam_role_policy_attachment.config_role_policy]
+  provider   = aws.subaccount
+  name       = "all"
+  role_arn   = aws_iam_role.config_role.arn
 }
 
 resource "aws_config_configuration_recorder_status" "all" {
@@ -191,6 +193,7 @@ resource "aws_config_configuration_recorder_status" "all" {
 }
 
 resource "aws_config_delivery_channel" "all" {
+  depends_on     = [aws_s3_bucket.config_bucket]
   provider       = aws.subaccount
   name           = "all"
   s3_bucket_name = local.config_bucket_name
