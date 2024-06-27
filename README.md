@@ -42,25 +42,25 @@ module "subaccount" {
       ]
     })
   }
-  users = [
-    {
+  users = {
+    "john_doe" = {
       name  = "john_doe"
-      email = "john_doe@example.com"
-      role  = "Developer"
+      email = "john_doe+extension@example.com"
+      role  = "Administrator"
     },
-    {
+    "jane_doe" = {
       name  = "jane_doe"
       email = "jane_doe@example.com"
-      role  = "Administrator"   ##at least one user created must be Administrator
+      role  = "Developers"
     }
-  ]
+  }
   password_length = 16
   group_name      = "Developers"
   group_policy_arns = [
     "arn:aws:iam::aws:policy/PowerUserAccess"
   ]
   region = "us-east-1"
-  cloudtrail_bucket_name     = "my-cloudtrail-bucket"
-  config_bucket_name         = "my-config-bucket"
+  cloudtrail_bucket_name_prefix     = "my-cloudtrail-bucket"
+  config_bucket_name_prefix         = "my-config-bucket"
 }
 ```
