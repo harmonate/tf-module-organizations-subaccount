@@ -157,7 +157,7 @@ resource "aws_cloudtrail" "subaccount_trail" {
 
 resource "aws_iam_role" "config_role" {
   provider = aws.subaccount
-  name     = "AWSServiceRoleForConfig"
+  name     = "AWSConfigRole"
   assume_role_policy = jsonencode({
     Version = "2012-10-17",
     Statement = [
